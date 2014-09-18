@@ -15,13 +15,14 @@
  *******************************************************************************/
 package com.nostra13.universalimageloader.utils;
 
+import javax.microedition.khronos.opengles.GL10;
+
 import android.graphics.BitmapFactory;
 import android.opengl.GLES10;
+
 import com.nostra13.universalimageloader.core.assist.ImageSize;
 import com.nostra13.universalimageloader.core.assist.ViewScaleType;
 import com.nostra13.universalimageloader.core.imageaware.ImageAware;
-
-import javax.microedition.khronos.opengles.GL10;
 
 /**
  * Provides calculations with image sizes, scales
@@ -96,6 +97,8 @@ public final class ImageSizeUtils {
 
 		int scale = 1;
 
+		L.d("powerOf2Scale:%s", powerOf2Scale);
+		
 		switch (viewScaleType) {
 			case FIT_INSIDE:
 				if (powerOf2Scale) {
@@ -105,6 +108,7 @@ public final class ImageSizeUtils {
 						scale *= 2;
 					}
 				} else {
+					// 要保证Image的两个边都在View内
 					scale = Math.max(srcWidth / targetWidth, srcHeight / targetHeight); // max
 				}
 				break;
@@ -116,6 +120,7 @@ public final class ImageSizeUtils {
 						scale *= 2;
 					}
 				} else {
+					// 只需要Image的一个边在View内就可以了
 					scale = Math.min(srcWidth / targetWidth, srcHeight / targetHeight); // min
 				}
 				break;
@@ -164,6 +169,8 @@ public final class ImageSizeUtils {
 	}
 
 	/**
+	 * <p>当取值为ImageScaleType.EXACTLY或ImageScaleType.EXACTLY_STRETCHED的时候，才执行该方法，目的是计算出
+	 * 一个精确的缩放比例，使最终的Bitmap大小刚好和ImageView大小一致.</p>
 	 * Computes scale of target size (<b>targetSize</b>) to source size (<b>srcSize</b>).<br />
 	 * <br />
 	 * <b>Examples:</b><br />
@@ -194,22 +201,101 @@ public final class ImageSizeUtils {
 
 		final float widthScale = (float) srcWidth / targetWidth;
 		final float heightScale = (float) srcHeight / targetHeight;
-
+		
 		final int destWidth;
 		final int destHeight;
+		/**
+		 * 按缩放类型，得到最终Image的宽度和高度.
+		 * 
+		 * FIT_INSIDE: 按缩放比例大的方向来缩放
+		 * CROP      : 按缩放比例小的方向来缩放
+		 * 
+		 * 如果Image比View小，就按各自的方式放大Image.但这里放大还没有影响结果，还需要看stretch参数.
+		 * 
+		 * 如果把下面的if else改成这种switch，会更容易理解.
+		 * switch (viewScaleType) {
+		 * case ViewScaleType.FIT_INSIDE:
+		 * 		if (widthScale >= heightScale) {
+		 * 			destWidth = targetWidth;
+		 * 			destHeight = (int) (srcHeight / widthScale);
+		 * 		} else {
+		 * 			destWidth = (int) (srcWidth / heightScale);
+		 * 			destHeight = targetHeight;
+		 * 		}
+		 * 		break;
+		 * 
+		 * case ViewScaleType.CROP:
+		 * 		if (widthScale < heightScale) {
+		 * 			destWidth = targetWidth;
+		 * 			destHeight = (int) (srcHeight / widthScale);
+		 * 		} else {
+		 * 			destWidth = (int) (srcWidth / heightScale);
+		 * 			destHeight = targetHeight;
+		 * 		}
+		 * 		break;
+		 * }
+		 */
 		if ((viewScaleType == ViewScaleType.FIT_INSIDE && widthScale >= heightScale) || (viewScaleType == ViewScaleType.CROP && widthScale < heightScale)) {
-			destWidth = targetWidth;
+//			destWidth = targetWidth;
+			destWidth = (int) (srcWidth / widthScale); // srcWidth / (srcWidth / targetWidth)
 			destHeight = (int) (srcHeight / widthScale);
 		} else {
 			destWidth = (int) (srcWidth / heightScale);
 			destHeight = targetHeight;
 		}
+		
+		// 上面计算出来的destWidth和destHeight值有可能比原图大，可能是不符合要求的
 
+		L.d("computeImageScale => src W=%1$d,H=%2$d target W=%3$d,H=%4$d scale w=%5$f,h=%6$f dest w:%7$d,h=%8$d", srcWidth, srcHeight, targetWidth, targetHeight, widthScale, heightScale, destWidth, destHeight);
+		
+		/**
+		 * (srcWidth x srcHeight) -> (destWidth x destHeight)
+		 * 上面的转换是经过了同一个scale的乘法操作
+		 * 
+		 * 计算缩放比例
+		 * 1. 如果不需要拉伸图片，图片变小了，计算新的scale值
+		 * 2. 如果需要拉伸图片，新图和原图不一样，计算新的scale值
+		 *    |- 目标图比原图小，会缩小原图，和上面一样
+		 *    |- 目标图比原图大，会放大原图，这就是ImageScaleType.EXACTLY和ImageScaleType.EXACTLY_STRETCHED不一样的地方
+		 */
 		float scale = 1;
 		if ((!stretch && destWidth < srcWidth && destHeight < srcHeight) || (stretch && destWidth != srcWidth && destHeight != srcHeight)) {
 			scale = (float) destWidth / srcWidth;
+			// 值和上面的是一样的
+//			scale = (float) destHeight / srcHeight;
 		}
 
+		// TODO just for test
+		computeImageScale2(srcSize, targetSize, viewScaleType, stretch);
+		
+		return scale;
+	}
+	
+	public static float computeImageScale2(ImageSize srcSize, ImageSize targetSize, ViewScaleType viewScaleType,
+			boolean stretch) {
+		final int srcWidth = srcSize.getWidth();
+		final int srcHeight = srcSize.getHeight();
+		final int targetWidth = targetSize.getWidth();
+		final int targetHeight = targetSize.getHeight();
+
+		final float widthScale = (float) targetWidth / srcWidth;
+		final float heightScale = (float) targetHeight / srcHeight;
+		
+		float scale = 1.0f;
+		
+		// 这个scale值有可能大于1，代表图片会被放大
+		if (viewScaleType == ViewScaleType.FIT_INSIDE) {
+			scale = Math.min(widthScale, heightScale);
+		} else if (viewScaleType == ViewScaleType.CROP) {
+			scale = Math.max(widthScale, heightScale);
+		}
+		
+		if (!stretch) {
+			scale = Math.min(1.0f, scale);
+		}
+		
+		L.d("my scale is %f", scale);
+		
 		return scale;
 	}
 }

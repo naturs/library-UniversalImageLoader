@@ -79,4 +79,16 @@ public class ContentLengthInputStream extends InputStream {
 	public boolean markSupported() {
 		return stream.markSupported();
 	}
+	
+	@Override
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		sb.append(this.getClass().getSimpleName())
+		  .append("[stream:")
+		  .append(stream)
+		  .append(", length:")
+		  .append(length)
+		  .append("]");
+		return sb.toString();
+	}
 }

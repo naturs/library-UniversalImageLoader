@@ -72,14 +72,19 @@ public class BaseImageDecoder implements ImageDecoder {
 		ImageFileInfo imageInfo;
 
 		InputStream imageStream = getImageStream(decodingInfo);
+		
 		if (imageStream == null) {
 			L.e(ERROR_NO_IMAGE_STREAM, decodingInfo.getImageKey());
 			return null;
 		}
+		
+		L.d("Decode image stream:%s", imageStream);
+		
 		try {
 			imageInfo = defineImageSizeAndRotation(imageStream, decodingInfo);
 			imageStream = resetStream(imageStream, decodingInfo);
 			Options decodingOptions = prepareDecodingOptions(imageInfo.imageSize, decodingInfo);
+			// 得到一个接近目标控件大小的bitmap
 			decodedBitmap = BitmapFactory.decodeStream(imageStream, null, decodingOptions);
 		} finally {
 			IoUtils.closeSilently(imageStream);
@@ -98,11 +103,20 @@ public class BaseImageDecoder implements ImageDecoder {
 		return decodingInfo.getDownloader().getStream(decodingInfo.getImageUri(), decodingInfo.getExtraForDownloader());
 	}
 
+	/**
+	 * 获取Image（即Bitmap）的大小和方向信息.</p>
+	 * @param imageStream
+	 * @param decodingInfo
+	 * @return
+	 * @throws IOException
+	 */
 	protected ImageFileInfo defineImageSizeAndRotation(InputStream imageStream, ImageDecodingInfo decodingInfo)
 			throws IOException {
 		Options options = new Options();
 		options.inJustDecodeBounds = true;
 		BitmapFactory.decodeStream(imageStream, null, options);
+		
+		L.d("Decode image option outMimeType:%s, width:%d, height:%d", options.outMimeType, options.outWidth, options.outHeight);
 
 		ExifInfo exif;
 		String imageUri = decodingInfo.getImageUri();
@@ -152,6 +166,12 @@ public class BaseImageDecoder implements ImageDecoder {
 		return new ExifInfo(rotation, flip);
 	}
 
+	/**
+	 * 计算出Bitmap的inSampleSize值，根据原图和目标控件的大小来决定，不一定是精确的
+	 * @param imageSize
+	 * @param decodingInfo
+	 * @return
+	 */
 	protected Options prepareDecodingOptions(ImageSize imageSize, ImageDecodingInfo decodingInfo) {
 		ImageScaleType scaleType = decodingInfo.getImageScaleType();
 		int scale;
@@ -164,7 +184,7 @@ public class BaseImageDecoder implements ImageDecoder {
 			boolean powerOf2 = scaleType == ImageScaleType.IN_SAMPLE_POWER_OF_2;
 			scale = ImageSizeUtils.computeImageSampleSize(imageSize, targetSize, decodingInfo.getViewScaleType(), powerOf2);
 		}
-		if (scale > 1 && loggingEnabled) {
+		if (/*scale > 1 && */loggingEnabled) {
 			L.d(LOG_SUBSAMPLE_IMAGE, imageSize, imageSize.scaleDown(scale), scale, decodingInfo.getImageKey());
 		}
 
@@ -183,6 +203,14 @@ public class BaseImageDecoder implements ImageDecoder {
 		return imageStream;
 	}
 
+	/**
+	 * 对缩放后的bitmap再次操作
+	 * @param subsampledBitmap
+	 * @param decodingInfo
+	 * @param rotation
+	 * @param flipHorizontal
+	 * @return
+	 */
 	protected Bitmap considerExactScaleAndOrientatiton(Bitmap subsampledBitmap, ImageDecodingInfo decodingInfo,
 			int rotation, boolean flipHorizontal) {
 		Matrix m = new Matrix();
@@ -215,8 +243,13 @@ public class BaseImageDecoder implements ImageDecoder {
 
 		Bitmap finalBitmap = Bitmap.createBitmap(subsampledBitmap, 0, 0, subsampledBitmap.getWidth(), subsampledBitmap
 				.getHeight(), m, true);
+		
+		// 一般来说，不使用ImageScaleType.EXACTLY或ImageScaleType.EXACTLY_STRETCHED，这里都不会创建新的Bitmap
 		if (finalBitmap != subsampledBitmap) {
 			subsampledBitmap.recycle();
+			L.d("subsampledBitmap is not equal to finalBitmap", new Object[]{});
+		} else {
+			L.d("subsampledBitmap is equal to finalBitmap", new Object[]{});
 		}
 		return finalBitmap;
 	}

@@ -147,6 +147,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 					}
 				}
 
+				// 根据设置，缓存到内存中
 				if (bmp != null && options.isCacheInMemory()) {
 					L.d(LOG_CACHE_IMAGE_IN_MEMORY, memoryCacheKey);
 					configuration.memoryCache.put(memoryCacheKey, bmp);
@@ -211,22 +212,34 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 		return false;
 	}
 
+	/**
+	 * 从文件或者网络加载图片【核心方法】
+	 * <p><b>注意：这里保存在文件中的图片，都是直接从网络或其他途径获取到的，没有经过其他的解析操作
+	 * （除非在ImageLoaderConfiguration中设置了缓存的图片的最大宽和高）</b></p>
+	 * @return
+	 * @throws TaskCancelledException
+	 */
 	private Bitmap tryLoadBitmap() throws TaskCancelledException {
 		Bitmap bitmap = null;
 		try {
+			// 1. 先从文件加载
 			File imageFile = configuration.diskCache.get(uri);
 			if (imageFile != null && imageFile.exists()) {
 				L.d(LOG_LOAD_IMAGE_FROM_DISK_CACHE, memoryCacheKey);
 				loadedFrom = LoadedFrom.DISC_CACHE;
 
 				checkTaskNotActual();
+				// 解析文件中的图片数据
 				bitmap = decodeImage(Scheme.FILE.wrap(imageFile.getAbsolutePath()));
 			}
+			
+			// 2. 从文件加载失败，改从网络加载
 			if (bitmap == null || bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) {
 				L.d(LOG_LOAD_IMAGE_FROM_NETWORK, memoryCacheKey);
 				loadedFrom = LoadedFrom.NETWORK;
 
 				String imageUriForDecoding = uri;
+				// 需要在DisplayImageOptions中设置才能进行硬盘缓存
 				if (options.isCacheOnDisk() && tryCacheImageOnDisk()) {
 					imageFile = configuration.diskCache.get(uri);
 					if (imageFile != null) {
@@ -235,6 +248,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 				}
 
 				checkTaskNotActual();
+				// 如果缓存在硬盘上了，就从文件加载并解析，否则先从网络加载再解析
 				bitmap = decodeImage(imageUriForDecoding);
 
 				if (bitmap == null || bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) {
@@ -258,6 +272,12 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 		return bitmap;
 	}
 
+	/**
+	 * 解析图片
+	 * @param imageUri 该uri通过{@link Scheme}来包装，代表不同类型的数据
+	 * @return 根据各种配置（ImageView的宽高、scaleType，DisplayImageOptions），返回符合要求的Bitmap
+	 * @throws IOException
+	 */
 	private Bitmap decodeImage(String imageUri) throws IOException {
 		ViewScaleType viewScaleType = imageAware.getScaleType();
 		ImageDecodingInfo decodingInfo = new ImageDecodingInfo(memoryCacheKey, imageUri, uri, targetSize, viewScaleType,
@@ -265,7 +285,11 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 		return decoder.decode(decodingInfo);
 	}
 
-	/** @return <b>true</b> - if image was downloaded successfully; <b>false</b> - otherwise */
+	/**
+	 * 从网络将图片下载下来，并缓存在文件中
+	 * @return <b>true</b> - if image was downloaded successfully; <b>false</b> -
+	 *         otherwise
+	 */
 	private boolean tryCacheImageOnDisk() throws TaskCancelledException {
 		L.d(LOG_CACHE_IMAGE_ON_DISK, memoryCacheKey);
 
