@@ -64,8 +64,8 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 	private static final String LOG_CACHE_IMAGE_IN_MEMORY = "Cache image in memory [%s]";
 	private static final String LOG_CACHE_IMAGE_ON_DISK = "Cache image on disk [%s]";
 	private static final String LOG_PROCESS_IMAGE_BEFORE_CACHE_ON_DISK = "Process image before cache on disk [%s]";
-	private static final String LOG_TASK_CANCELLED_IMAGEAWARE_REUSED = "ImageAware is reused for another image. Task is cancelled. [%s]";
-	private static final String LOG_TASK_CANCELLED_IMAGEAWARE_COLLECTED = "ImageAware was collected by GC. Task is cancelled. [%s]";
+	private static final String LOG_TASK_CANCELLED_IMAGEAWARE_REUSED = "ImageAware is reused for another image. LoadAndDisplayImageTask is cancelled. [%s]";
+	private static final String LOG_TASK_CANCELLED_IMAGEAWARE_COLLECTED = "ImageAware was collected by GC. LoadAndDisplayImageTask is cancelled. [%s]";
 	private static final String LOG_TASK_INTERRUPTED = "Task was interrupted [%s]";
 
 	private static final String ERROR_NO_IMAGE_STREAM = "No stream for image [%s]";
@@ -126,11 +126,14 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 			L.d(LOG_WAITING_FOR_IMAGE_LOADED, memoryCacheKey);
 		}
 
+		// 防止两个线程同时加载一张图片，比如ListView中向上滑动后马上向下滑动，
+		// 再滑回去。
 		loadFromUriLock.lock();
 		Bitmap bmp;
 		try {
 			checkTaskNotActual();
 
+			// 先从内存中获取
 			bmp = configuration.memoryCache.get(memoryCacheKey);
 			if (bmp == null || bmp.isRecycled()) {
 				bmp = tryLoadBitmap();
@@ -180,6 +183,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 	/** @return <b>true</b> - if task should be interrupted; <b>false</b> - otherwise */
 	private boolean waitIfPaused() {
 		AtomicBoolean pause = engine.getPause();
+		// 单例模式中的懒汉模式写法
 		if (pause.get()) {
 			synchronized (engine.getPauseLock()) {
 				if (pause.get()) {

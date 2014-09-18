@@ -231,9 +231,6 @@ public class ImageLoader {
 		ImageSize targetSize = ImageSizeUtils.defineTargetSizeForView(imageAware, configuration.getMaxImageSize());
 		String memoryCacheKey = MemoryCacheUtils.generateKey(uri, targetSize);
 		
-		L.d("targetSize:%s", targetSize);
-		L.d("memoryCacheKey:%s", memoryCacheKey);
-		
 		engine.prepareDisplayTaskFor(imageAware, memoryCacheKey);
 
 		listener.onLoadingStarted(uri, imageAware.getWrappedView());

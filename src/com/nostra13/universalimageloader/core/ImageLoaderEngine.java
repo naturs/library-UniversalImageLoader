@@ -72,6 +72,7 @@ class ImageLoaderEngine {
 				File image = configuration.diskCache.get(task.getLoadingUri());
 				boolean isImageCachedOnDisk = image != null && image.exists();
 				initExecutorsIfNeed();
+				// 将加载网络图片和加载缓存图片的线程池区分开来
 				if (isImageCachedOnDisk) {
 					taskExecutorForCachedImages.execute(task);
 				} else {

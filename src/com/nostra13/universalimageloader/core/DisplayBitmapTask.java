@@ -33,8 +33,8 @@ import com.nostra13.universalimageloader.utils.L;
 final class DisplayBitmapTask implements Runnable {
 
 	private static final String LOG_DISPLAY_IMAGE_IN_IMAGEAWARE = "Display image in ImageAware (loaded from %1$s) [%2$s]";
-	private static final String LOG_TASK_CANCELLED_IMAGEAWARE_REUSED = "ImageAware is reused for another image. Task is cancelled. [%s]";
-	private static final String LOG_TASK_CANCELLED_IMAGEAWARE_COLLECTED = "ImageAware was collected by GC. Task is cancelled. [%s]";
+	private static final String LOG_TASK_CANCELLED_IMAGEAWARE_REUSED = "ImageAware is reused for another image. DisplayBitmapTask is cancelled. [%s]";
+	private static final String LOG_TASK_CANCELLED_IMAGEAWARE_COLLECTED = "ImageAware was collected by GC. DisplayBitmapTask is cancelled. [%s]";
 
 	private final Bitmap bitmap;
 	private final String imageUri;
@@ -68,6 +68,7 @@ final class DisplayBitmapTask implements Runnable {
 		} else {
 			L.d(LOG_DISPLAY_IMAGE_IN_IMAGEAWARE, loadedFrom, memoryCacheKey);
 			displayer.display(bitmap, imageAware, loadedFrom);
+			// 移除了imageAware
 			engine.cancelDisplayTaskFor(imageAware);
 			listener.onLoadingComplete(imageUri, imageAware.getWrappedView(), bitmap);
 		}
